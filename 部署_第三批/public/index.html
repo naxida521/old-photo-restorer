@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>老照片AI修复工具</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.hero{text-align:center;padding:48px 20px 32px;background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%)}
+.hero h1{font-size:2.4em;background:linear-gradient(135deg,#60a5fa,#a78bfa,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px}
+.hero p{color:#94a3b8;margin-top:8px;font-size:1em}
+.container{max-width:1100px;margin:0 auto;padding:0 20px 40px}
+.settings{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid #334155}
+.settings summary{cursor:pointer;color:#94a3b8;font-size:.85em;user-select:none}
+.settings .row{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.settings label{font-size:.8em;color:#64748b}
+.settings input{flex:1;min-width:200px;padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:.85em}
+.upload-zone{border:2px dashed #334155;border-radius:16px;padding:48px 20px;text-align:center;cursor:pointer;transition:all .3s;background:#1e293b;margin-bottom:24px}
+.upload-zone:hover,.upload-zone.drag{border-color:#60a5fa;background:#1e294a}
+.upload-zone input{display:none}
+.upload-zone .icon{font-size:3em;margin-bottom:12px}
+.upload-zone .text{color:#94a3b8;font-size:1em}
+.upload-zone .text span{color:#60a5fa;text-decoration:underline}
+.preview-upload{max-width:300px;max-height:200px;border-radius:8px;margin-top:16px}
+#processBtn{display:none;width:100%;padding:16px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:12px;font-size:1.1em;cursor:pointer;font-family:inherit;margin-bottom:24px;transition:opacity .3s}
+#processBtn:hover{opacity:.9}
+#processBtn:disabled{opacity:.5;cursor:not-allowed}
+.progress-section{display:none;margin-bottom:24px}
+.progress-section h3{color:#94a3b8;margin-bottom:12px;font-size:.9em}
+.steps{display:flex;gap:8px;flex-wrap:wrap}
+.step{flex:1;min-width:140px;padding:12px;border-radius:10px;background:#1e293b;text-align:center;font-size:.85em;border:1px solid #334155}
+.step.active{border-color:#3b82f6;background:#1e3a5f}
+.step.active .step-status{color:#60a5fa}
+.step.done{border-color:#22c55e;background:#14532d;color:#86efac}
+.step .step-name{font-weight:600;margin-bottom:4px}
+.step .step-status{font-size:.8em;color:#94a3b8}
+.step.done .step-status{color:#86efac}
+.step.error{border-color:#dc2626;background:#450a0a}
+.step.error .step-status{color:#fca5a5}
+.results{display:none}
+.results h2{color:#e2e8f0;margin-bottom:16px;font-size:1.2em}
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.gallery .card{background:#1e293b;border-radius:12px;overflow:hidden;border:1px solid #334155}
+.gallery .card .label{padding:10px 14px;font-size:.85em;font-weight:600;color:#94a3b8;background:#0f172a}
+.gallery .card img{width:100%;display:block;cursor:pointer;transition:transform .3s}
+.gallery .card img:hover{transform:scale(1.02)}
+.download-all{display:none;margin-top:16px;text-align:center}
+.download-all a{display:inline-block;padding:12px 28px;background:#22c55e;color:#fff;text-decoration:none;border-radius:10px;font-size:.95em;margin:4px;transition:opacity .3s}
+.download-all a:hover{opacity:.85}
+.error-box{display:none;background:#450a0a;border:1px solid #dc2626;border-radius:10px;padding:16px;margin-bottom:16px;color:#fca5a5;font-size:.9em;line-height:1.6}
+.lightbox{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:999;justify-content:center;align-items:center;cursor:pointer}
+.lightbox.show{display:flex}
+.lightbox img{max-width:90%;max-height:90%;border-radius:8px}
+footer{text-align:center;padding:24px;color:#475569;font-size:.8em}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #60a5fa;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>老照片 AI 修复工具</h1>
+  <p>自动去划痕 / 黑白上色 / 超清放大 — 一步到位</p>
+</div>
+
+<div class="container">
+  <details class="settings">
+    <summary>API 设置（可选）</summary>
+    <div class="row">
+      <label>Hugging Face Token：</label>
+      <input type="password" id="hfToken" placeholder="hf_xxxxxxxx（不填则使用默认）">
+    </div>
+  </details>
+
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">&#128247;</div>
+    <div class="text">点击或拖拽上传老照片<br><span>支持 JPG / PNG，最大 10MB</span></div>
+    <input type="file" id="fileInput" accept="image/*">
+    <img id="previewUpload" class="preview-upload" style="display:none">
+  </div>
+
+  <button id="processBtn">&#9889; 开始 AI 修复</button>
+
+  <div class="progress-section" id="progressSection">
+    <h3>修复进度</h3>
+    <div class="steps">
+      <div class="step" id="step1"><div class="step-name">&#128065; 去划痕修复</div><div class="step-status">等待中</div></div>
+      <div class="step" id="step2"><div class="step-name">&#127912; 黑白上色</div><div class="step-status">等待中</div></div>
+      <div class="step" id="step3"><div class="step-name">&#128171; 超清放大</div><div class="step-status">等待中</div></div>
+    </div>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="results" id="results">
+    <h2>&#10024; 修复结果</h2>
+    <div class="gallery" id="gallery"></div>
+  </div>
+  <div class="download-all" id="downloadAll"></div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('show')">
+  <img id="lightboxImg">
+</div>
+
+<footer>老照片AI修复工具 — 课程作业 Demo</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+let originalImage = null;
+
+// Upload
+const uploadZone = $('#uploadZone');
+const fileInput = $('#fileInput');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  if (!file.type.startsWith('image/')) return showError('请上传图片文件');
+  if (file.size > 10 * 1024 * 1024) return showError('图片不能超过 10MB');
+
+  // 压缩大图以加速上传
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const MAX = 1024;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = h * MAX / w; w = MAX; }
+        else { w = w * MAX / h; h = MAX; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      originalImage = canvas.toDataURL('image/jpeg', 0.9);
+
+      const preview = $('#previewUpload');
+      preview.src = originalImage;
+      preview.style.display = 'block';
+      $('#processBtn').style.display = 'block';
+      $('#errorBox').style.display = 'none';
+      $('#results').style.display = 'none';
+      $('#downloadAll').style.display = 'none';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Process
+$('#processBtn').addEventListener('click', startProcess);
+
+async function startProcess() {
+  if (!originalImage) return;
+  const btn = $('#processBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 修复中，请耐心等待...';
+  $('#errorBox').style.display = 'none';
+  $('#results').style.display = 'none';
+  $('#downloadAll').style.display = 'none';
+  $('#progressSection').style.display = 'block';
+
+  ['step1','step2','step3'].forEach(id => {
+    const el = $(`#${id}`);
+    el.className = 'step';
+    el.querySelector('.step-status').textContent = '等待中';
+  });
+
+  const output = { original: originalImage };
+
+  try {
+    setStep('step1', 'active', '处理中...');
+    output.face = await callAPI('face_restore', originalImage);
+    setStep('step1', 'done', '已完成');
+
+    setStep('step2', 'active', '处理中...');
+    output.color = await callAPI('colorize', output.face);
+    setStep('step2', 'done', '已完成');
+
+    setStep('step3', 'active', '处理中...');
+    output.final = await callAPI('upscale', output.color);
+    setStep('step3', 'done', '已完成');
+
+    showResults(output);
+  } catch (err) {
+    showError(err.message);
+    // 标记失败的步骤
+    ['step1','step2','step3'].forEach(id => {
+      const el = $(`#${id}`);
+      if (el.classList.contains('active')) {
+        el.className = 'step error';
+        el.querySelector('.step-status').textContent = '失败';
+      }
+    });
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#9889; 开始 AI 修复';
+  }
+}
+
+function setStep(id, status, text) {
+  const el = $(`#${id}`);
+  el.className = `step ${status}`;
+  el.querySelector('.step-status').textContent = text;
+}
+
+async function callAPI(type, imageData, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+
+      const token = $('#hfToken').value.trim() || undefined;
+      const res = await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData, type, token }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      return data.image;
+    } catch (err) {
+      if (attempt < retries) {
+        console.log(`[retry] ${type} 第${attempt + 1}次失败，重试中...`);
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+function showError(msg) {
+  const box = $('#errorBox');
+  box.innerHTML = '<strong>处理出错</strong><br>' + msg +
+    '<br><br>可能的原因：模型正在冷启动（首次加载较慢），请稍后重试。';
+  box.style.display = 'block';
+}
+
+function showResults(output) {
+  $('#results').style.display = 'block';
+  $('#downloadAll').style.display = 'block';
+  const gallery = $('#gallery');
+  gallery.innerHTML = '';
+
+  const items = [
+    { label: '原始照片', src: output.original, file: 'original.png' },
+    { label: '去划痕修复', src: output.face, file: 'face_restored.png' },
+    { label: 'AI 上色', src: output.color, file: 'colorized.png' },
+    { label: '超清放大（最终）', src: output.final, file: 'final_hd.png' },
+  ];
+
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="label">${item.label}</div><img src="${item.src}" onclick="showLightbox(this.src)">`;
+    gallery.appendChild(card);
+  });
+
+  $('#downloadAll').innerHTML = items
+    .filter(i => i.src !== output.original)
+    .map(i => `<a href="${i.src}" download="${i.file}">&#11015; ${i.label}</a>`)
+    .join('');
+}
+
+function showLightbox(src) {
+  $('#lightboxImg').src = src;
+  $('#lightbox').classList.add('show');
+}
+</script>
+</body>
+</html>
